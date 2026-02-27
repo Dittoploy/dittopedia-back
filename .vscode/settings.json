@@ -1,0 +1,12 @@
+{
+  // Active ESLint flat config (eslint.config.mjs)
+  "eslint.useFlatConfig": true,
+
+  // Valide ESLint sur ces langages
+  "eslint.validate": ["typescript", "javascript"],
+
+  // Fix auto au save (optionnel mais recommandé)
+  "editor.codeActionsOnSave": {
+    "source.fixAll.eslint": "explicit"
+  }
+}
