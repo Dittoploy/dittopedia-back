@@ -1,98 +1,111 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# Dittopedia - Backend
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
-
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+Backend API de Dittopedia construit avec **NestJS** et **Prisma**.
 
 ## Description
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+Ce service fournit l'API REST pour la plateforme Dittopedia. Il gère l'authentification, les utilisateurs, et l'accès aux données via une base de données PostgreSQL.
 
-## Project setup
+## Prérequis
 
-```bash
-$ bun install
-```
+- Node.js (v18+)
+- Bun (package manager)
+- PostgreSQL (pour la base de données)
 
-## Compile and run the project
-
-```bash
-# development
-$ bun run start
-
-# watch mode
-$ bun run start:dev
-
-# production mode
-$ bun run start:prod
-```
-
-## Run tests
+## Installation
 
 ```bash
-# unit tests
-$ bun run test
-
-# e2e tests
-$ bun run test:e2e
-
-# test coverage
-$ bun run test:cov
+bun install
 ```
 
-## Deployment
+## Commandes utiles
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
+### Développement
 
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+| Commande | Description |
+|----------|-------------|
+| `bun run dev` | Démarre le serveur en mode développement avec rechargement automatique |
+| `bun run dev:debug` | Démarre en mode debug avec inspection Node.js activée |
+| `bun run build` | Compile le code TypeScript en JavaScript |
+| `bun run start` | Démarre le serveur compilé (production) |
+
+### Linting et Format
+
+| Commande | Description |
+|----------|-------------|
+| `bun run lint` | Vérifie le code avec ESLint |
+| `bun run lint:fix` | Corrige automatiquement les erreurs ESLint |
+| `bun run format` | Formate le code avec Prettier |
+
+### Tests
+
+| Commande | Description |
+|----------|-------------|
+| `bun run test` | Exécute les tests unitaires |
+| `bun run test:watch` | Exécute les tests en mode watch |
+| `bun run test:cov` | Génère un rapport de couverture de code |
+| `bun run test:debug` | Exécute les tests en mode debug |
+| `bun run test:e2e` | Exécute les tests d'intégration |
+
+### Base de données (Prisma)
+
+| Commande | Description |
+|----------|-------------|
+| `bun run prisma:generate` | Génère le client Prisma basé sur le schéma |
+| `bun run prisma:migrate` | Crée et applique une nouvelle migration |
+| `bun run prisma:studio` | Ouvre Prisma Studio pour explorer les données (interface web) |
+| `bun run prisma:seed` | Exécute le script de seed pour initialiser les données |
+
+## Démarrage rapide
 
 ```bash
-$ bun install -g @nestjs/mau
-$ mau deploy
+# 1. Installer les dépendances
+bun install
+
+# 2. Configurer les variables d'environnement
+# Créer un fichier .env avec DATABASE_URL, etc.
+
+# 3. Générer le client Prisma
+bun run prisma:generate
+
+# 4. Appliquer les migrations
+bun run prisma:migrate
+
+# 5. Démarrer le serveur
+bun run dev
 ```
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+## Architecture
 
-## Resources
+```
+src/
+├── main.ts              # Point d'entrée
+├── app.module.ts        # Module principal
+├── app.controller.ts    # Routes principales
+├── app.service.ts       # Logique métier
+├── prisma/              # Configuration Prisma
+└── users/               # Module utilisateurs
+```
 
-Check out a few resources that may come in handy when working with NestJS:
+## Notes importantes
 
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
+### Base de données
+- Le schéma Prisma est défini dans `prisma/schema.prisma`
+- Les migrations sont stockées dans `prisma/migrations/`
+- Toujours exécuter les migrations avant de démarrer : `bun run prisma:migrate`
+- Utiliser `prisma:studio` pour explorer la base de données en GUI
 
-## Support
+### Code
+- TypeScript strict activé
+- ESLint et Prettier configurés pour le formatage
+- Tous les fichiers doivent être formatés avant de commit
+- Les tests doivent avoir une couverture minimale
 
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
-
-## Stay in touch
-
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
+### Développement
+- Utiliser `bun run dev` pour le développement (rechargement chaud activé)
+- Ne pas commiter le dossier `dist/` ou `node_modules/`
+- Les variables d'environnement sont requises (voir `.env.example` s'il existe)
 
 ## License
 
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+UNLICENSED
