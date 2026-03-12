@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
@@ -22,6 +22,10 @@ export class UsersService {
   }
 
   async update(id: string, dto: UpdateUserDto) {
+    if (!Object.values(dto).some((v) => v !== undefined)) {
+      throw new BadRequestException('At least one field must be provided for update');
+    }
+
     await this.findOne(id);
     return this.prisma.user.update({ where: { id }, data: dto });
   }

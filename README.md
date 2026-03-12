@@ -95,11 +95,19 @@ src/
 - Toujours exécuter les migrations avant de démarrer : `bun run prisma:migrate`
 - Utiliser `prisma:studio` pour explorer la base de données en GUI
 
+### Tests d'intégration (E2E)
+- Les tests E2E utilisent une base de données SQLite isolée (`test.db`) configurée via `.env.test`
+- PrismaService est configuré pour **ignorer les connexions automatiques en mode test** (NODE_ENV=test)
+- Le fichier `test/setup-e2e.ts` charge `.env.test` avant chaque test
+- Prisma est mockifié dans la configuration Jest (`test/__mocks__/prisma.mock.ts`) pour éviter les erreurs d'import ESM
+- **Les tests E2E s'exécutent sans nécessiter une base de données PostgreSQL externe**
+- Configuration Jest: `test/jest-e2e.json` avec support ESM et moduleNameMapper pour le mock Prisma
+
 ### Code
-- TypeScript strict activé
+- TypeScript utilisé (mode strict recommandable via `tsconfig.json`)
 - ESLint et Prettier configurés pour le formatage
 - Tous les fichiers doivent être formatés avant de commit
-- Les tests doivent avoir une couverture minimale
+- Objectif : maintenir une bonne couverture de tests (voir `bun run test:cov`)
 
 ### Développement
 - Utiliser `bun run dev` pour le développement (rechargement chaud activé)
