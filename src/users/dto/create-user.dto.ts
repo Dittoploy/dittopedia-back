@@ -1,2 +1,7 @@
-// TODO: Ajouter les champs + validations (class-validator)
-export class CreateUserDto {}
+import { Role } from '../../../generated/prisma/client.js';
+
+export class CreateUserDto {
+  username!: string;
+  email!: string;
+  role?: Role;
+}
