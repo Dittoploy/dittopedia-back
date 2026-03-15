@@ -6,6 +6,7 @@ COPY package.json bun.lock* bun.lockb* ./
 RUN bun install --no-save
 
 COPY . .
+RUN bun run prisma:generate
 RUN bun run build
 
 # ---- Production ----
@@ -19,4 +20,4 @@ COPY --from=builder /app/package.json ./
 ENV NODE_ENV=production
 EXPOSE 3000
 
-CMD ["node", "dist/main"]
+CMD ["node", "dist/src/main.js"]
