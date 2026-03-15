@@ -1,4 +1,4 @@
-import { Role } from '../../../generated/prisma/client.js';
+import { Role } from '@prisma/client';
 
 export class CreateUserDto {
   username!: string;
