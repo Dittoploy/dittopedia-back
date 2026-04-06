@@ -1,3 +1,16 @@
+# ---- Development ----
+FROM oven/bun:1 AS dev
+WORKDIR /app
+
+COPY package.json bun.lock* bun.lockb* ./
+RUN bun install --no-save
+
+COPY . .
+
+EXPOSE 3000
+
+CMD ["bun", "run", "dev"]
+
 # ---- Build ----
 FROM oven/bun:1 AS builder
 WORKDIR /app
