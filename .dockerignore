@@ -4,3 +4,7 @@ dist
 .next
 coverage
 *.md
+infra-workdir
+.terraform
+**/.terraform
+**/.terraform.lock.hcl
