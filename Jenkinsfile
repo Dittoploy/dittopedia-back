@@ -248,7 +248,7 @@ pipeline {
       steps {
         script {
           echo "🚀 Starting AWS deployment to staging..."
-          
+
           withCredentials([
             usernamePassword(credentialsId: "${DOCKER_CREDENTIALS_ID}", usernameVariable: 'DOCKERHUB_USERNAME', passwordVariable: 'DOCKERHUB_TOKEN'),
             usernamePassword(credentialsId: 'aws-deploy-creds', usernameVariable: 'AWS_ACCESS_KEY_ID', passwordVariable: 'AWS_SECRET_ACCESS_KEY'),
@@ -268,36 +268,34 @@ pipeline {
                 echo "❌ Missing resolved SSH ingress CIDR in ${WORKSPACE}/.ssh_ingress_cidr" >&2
                 exit 1
               fi
-              
-              # Extract SSH public key from private key
+
               DEPLOY_SSH_KEY_FILE="$WORKER_DEPLOY_KEY_PATH"
               PUBKEY_FILE="$(mktemp)"
               KNOWN_HOSTS_FILE="$(mktemp)"
               ANSIBLE_EXTRA_VARS_FILE=""
               trap 'rm -f "${PUBKEY_FILE}" "${KNOWN_HOSTS_FILE}" "${ANSIBLE_EXTRA_VARS_FILE:-}"' EXIT
-              
+
               if [ ! -f "${DEPLOY_SSH_KEY_FILE}" ]; then
                 echo "❌ Missing SSH key: ${DEPLOY_SSH_KEY_FILE}" >&2
                 exit 1
               fi
-              
+
               chmod 600 "${DEPLOY_SSH_KEY_FILE}" || true
               if ! ssh-keygen -y -f "${DEPLOY_SSH_KEY_FILE}" > "${PUBKEY_FILE}" 2>/dev/null; then
                 echo "❌ Invalid SSH key at ${DEPLOY_SSH_KEY_FILE}" >&2
                 exit 1
               fi
-              
+
               SSH_PUBLIC_KEY="$(cat ${PUBKEY_FILE})"
               if [ -z "${SSH_PUBLIC_KEY}" ]; then
                 echo "❌ Failed to extract SSH public key" >&2
                 exit 1
               fi
               echo "✅ SSH public key extracted from ${DEPLOY_SSH_KEY_FILE}"
-              
-              # Verify Docker Hub credentials
+
               echo "🔐 Authenticating with Docker Hub..."
               echo "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
-              
+
               # ====== Step 2: Clone Infra Repo ======
               echo "📦 Step 2: Cloning infrastructure repository..."
               if [ -d "infra-workdir/.git" ]; then
@@ -318,41 +316,83 @@ pipeline {
                 find infra-workdir -maxdepth 4 -type d | sed -n '1,120p' >&2
                 exit 1
               fi
-              
+
               cd "$TERRAFORM_DIR"
-              
-              # ====== Step 3: Terraform Apply ======
-              echo "🏗️  Step 3: Applying Terraform configuration..."
+
+              # ====== Step 3: Terraform Plan + Safety Check ======
+              echo "🏗️  Step 3: Planning Terraform configuration..."
               terraform init -input=false
-              terraform apply -auto-approve -input=false \
+
+              # Génère le plan dans un fichier binaire réutilisé par l'apply,
+              # ce qui garantit que l'apply exécute exactement ce qui a été planifié.
+              terraform plan -out=tfplan -input=false \
                 -var="aws_region=$AWS_REGION" \
                 -var="ssh_ingress_cidr=$SSH_INGRESS_CIDR_EFFECTIVE" \
                 -var="enable_rds=true" \
                 -var="rds_master_password=$RDS_PASSWORD" \
                 -var="public_key=$SSH_PUBLIC_KEY"
-              
+
+              # Vérifie qu'aucune ressource existante ne sera détruite.
+              # Sur un re-déploiement, Terraform ne doit faire que des updates
+              # ou des no-ops. Toute destruction indique un bug dans le code
+              # Terraform (count instable, data source changeant entre deux runs).
+              PLAN_SUMMARY="$(terraform show -json tfplan | python3 -c "
+import sys, json
+plan = json.load(sys.stdin)
+changes = plan.get('resource_changes', [])
+destroys = [
+  c['address'] for c in changes
+  if 'delete' in c.get('change', {}).get('actions', [])
+]
+if destroys:
+    print('DESTROY_DETECTED:' + ','.join(destroys))
+else:
+    print('SAFE')
+" 2>/dev/null || echo 'PARSE_ERROR')"
+
+              if echo "$PLAN_SUMMARY" | grep -q "DESTROY_DETECTED"; then
+                DESTROYED_RESOURCES="$(echo "$PLAN_SUMMARY" | sed 's/DESTROY_DETECTED://')"
+                echo ""
+                echo "❌ ERREUR : Terraform planifie la destruction de ressources existantes :"
+                echo "   $DESTROYED_RESOURCES"
+                echo ""
+                echo "Sur un re-déploiement, aucune ressource ne devrait être détruite."
+                echo "Vérifiez les blocs 'count' conditionnels dans le code Terraform."
+                echo ""
+                exit 1
+              fi
+
+              if echo "$PLAN_SUMMARY" | grep -q "PARSE_ERROR"; then
+                echo "⚠️  Safety check ignoré (python3 indisponible), apply en cours..."
+              else
+                echo "✅ Plan validé — aucune destruction planifiée"
+              fi
+
+              echo "🏗️  Step 3b: Applying Terraform configuration..."
+              terraform apply -auto-approve -input=false tfplan
+
               # ====== Step 4: Retrieve Terraform Outputs ======
               echo "📊 Step 4: Retrieving deployment outputs..."
               BACKEND_PUBLIC_IP="$(terraform output -raw backend_public_ip 2>/dev/null || echo '')"
               BACKEND_INSTANCE_ID="$(terraform output -raw backend_instance_id 2>/dev/null || echo '')"
               RDS_ENDPOINT="$(terraform output -raw rds_endpoint 2>/dev/null | grep -v 'N/A' || echo '')"
-              
+
               if [ -z "${BACKEND_PUBLIC_IP}" ]; then
                 echo "❌ Failed to retrieve backend public IP from Terraform"
                 exit 1
               fi
-              
+
               echo "✓ Backend Instance ID: ${BACKEND_INSTANCE_ID}"
               echo "✓ Backend Public IP: ${BACKEND_PUBLIC_IP}"
               echo "✓ RDS Endpoint: ${RDS_ENDPOINT}"
-              
+
               # ====== Step 5: SSH Health Check ======
               echo "🔍 Step 5: Checking SSH connectivity..."
               SSH_KEY_PATH="$DEPLOY_SSH_KEY_FILE"
               MAX_RETRIES=12
               RETRY_DELAY=10
               RETRY_COUNT=0
-              
+
               while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
                 if ssh -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile="$KNOWN_HOSTS_FILE" \
                     -i "${SSH_KEY_PATH}" ubuntu@"${BACKEND_PUBLIC_IP}" "echo 'SSH OK'" >/dev/null 2>&1; then
@@ -363,16 +403,16 @@ pipeline {
                 echo "⏳ SSH retry ${RETRY_COUNT}/${MAX_RETRIES}... (waiting ${RETRY_DELAY}s)"
                 sleep ${RETRY_DELAY}
               done
-              
+
               if [ $RETRY_COUNT -eq $MAX_RETRIES ]; then
                 echo "❌ SSH connectivity timeout after ${MAX_RETRIES} retries"
                 exit 1
               fi
-              
+
               # ====== Step 6: Generate Ansible Inventory ======
               echo "📝 Step 6: Generating Ansible inventory..."
               cd "${WORKSPACE}/${ANSIBLE_DIR}"
-              
+
               cat > hosts.ini <<EOF
 [backend]
 ${BACKEND_PUBLIC_IP} ansible_user=ubuntu ansible_ssh_private_key_file=${SSH_KEY_PATH} ansible_ssh_common_args="-o StrictHostKeyChecking=no"
@@ -381,7 +421,7 @@ EOF
               umask 077
               ANSIBLE_EXTRA_VARS_FILE="$(mktemp)"
               if [ -n "${RDS_ENDPOINT}" ]; then
-                DATABASE_URL="postgresql://postgres:${RDS_PASSWORD}@${RDS_ENDPOINT}/dittopedia"
+                DATABASE_URL="postgresql://postgres:${RDS_PASSWORD}@${RDS_ENDPOINT}/dittopedia?sslmode=no-verify"
               else
                 DATABASE_URL="postgresql://postgres:${RDS_PASSWORD}@localhost:5432/dittopedia"
               fi
@@ -391,25 +431,25 @@ backend_image: "$BACKEND_IMAGE"
 dockerhub_user: "$DOCKERHUB_USERNAME"
 dockerhub_password: "$DOCKERHUB_TOKEN"
 database_url: "$DATABASE_URL"
+frontend_url: "*"
 EOF
-              
+
               echo "✓ Ansible inventory created"
               cat hosts.ini
-              
+
               # ====== Step 7: Run Ansible Playbook ======
               echo "🤖 Step 7: Running Ansible deployment..."
               ansible-playbook -i hosts.ini site.yml \
                 --extra-vars "@$ANSIBLE_EXTRA_VARS_FILE" \
                 -v
-              
+
               # ====== Step 8: Post-Deployment Validation ======
               echo "✅ Step 8: Validating deployment..."
-              
-              # Wait for backend health check
+
               HEALTH_CHECK_RETRIES=10
               HEALTH_CHECK_DELAY=3
               HEALTH_COUNT=0
-              
+
               while [ $HEALTH_COUNT -lt $HEALTH_CHECK_RETRIES ]; do
                 if curl -f -s http://"${BACKEND_PUBLIC_IP}":3000/health/live >/dev/null 2>&1; then
                   echo "✓ Backend health check passed"
@@ -419,21 +459,19 @@ EOF
                 echo "⏳ Health check retry ${HEALTH_COUNT}/${HEALTH_CHECK_RETRIES}... (waiting ${HEALTH_CHECK_DELAY}s)"
                 sleep ${HEALTH_CHECK_DELAY}
               done
-              
+
               if [ $HEALTH_COUNT -eq $HEALTH_CHECK_RETRIES ]; then
                 echo "⚠️  Backend health check timeout (may still be starting)"
               else
                 echo "✓ Backend API responding on http://${BACKEND_PUBLIC_IP}:3000"
               fi
-              
-              # Verify Valkey
+
               if ssh -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile="$KNOWN_HOSTS_FILE" \
                   -i "${SSH_KEY_PATH}" ubuntu@"${BACKEND_PUBLIC_IP}" \
                   "docker exec valkey redis-cli ping" >/dev/null 2>&1; then
                 echo "✓ Valkey cache verified"
               fi
-              
-              # Display summary
+
               echo ""
               echo "╔════════════════════════════════════════╗"
               echo "║ ✅ Backend Deployment Complete        ║"
@@ -448,7 +486,7 @@ EOF
               echo "  1. Verify health: curl http://${BACKEND_PUBLIC_IP}:3000/health/live"
               echo "  2. View logs: ssh -i ${SSH_KEY_PATH} ubuntu@${BACKEND_PUBLIC_IP}"
               echo "  3. Run migrations: docker exec dittopedia-backend npx prisma migrate deploy"
-              
+
               docker logout || true
             '''
           }
@@ -464,17 +502,25 @@ EOF
 
   post {
     always {
-      // Clean up sensitive files
+            // Nettoyage des fichiers temporaires
       sh 'rm -f .ssh_ingress_cidr 2>/dev/null || true'
+      
+      // Déconnexion de Docker Hub pour la sécurité
       sh 'docker logout 2>/dev/null || true'
+      
+      // NETTOYAGE DISQUE : Supprime les images intermédiaires (dangling) 
+      // qui n'ont plus de tag (souvent créées par le build précédent)
+      sh 'docker image prune -f'
     }
     failure {
+      sh 'docker system prune -f --volumes'
       echo "❌ Pipeline failed. Review logs above for details."
       echo "📝 Common issues:"
       echo "  - Bun not found: Ensure Bun is installed on agent at /usr/local/bin/bun"
       echo "  - Docker build failed: Check Dockerfile and dependencies"
       echo "  - AWS deployment: Verify all 5 credentials are configured"
       echo "  - SSH connectivity timeout: Check security group rules and EC2 instance status"
+      echo "  - Terraform destroy detected: Check for unstable 'count' in security group / key pair resources"
     }
     success {
       echo "✅ Pipeline completed successfully"
